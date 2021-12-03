@@ -19,7 +19,7 @@ enum AppState {
 }
 
 class _MyAppState extends State<MyApp> {
-  List<HealthDataPoint> _healthDataList = [];
+  List<HealthDataStatistics> _healthDataList = [];
   AppState _state = AppState.DATA_NOT_FETCHED;
 
   @override
@@ -38,10 +38,10 @@ class _MyAppState extends State<MyApp> {
     // define the types to get
     List<HealthDataType> types = [
       HealthDataType.STEPS,
-      HealthDataType.WEIGHT,
-      HealthDataType.HEIGHT,
-      HealthDataType.BLOOD_GLUCOSE,
-      HealthDataType.DISTANCE_WALKING_RUNNING,
+      // HealthDataType.WEIGHT,
+      // HealthDataType.HEIGHT,
+      // HealthDataType.BLOOD_GLUCOSE,
+      // HealthDataType.DISTANCE_WALKING_RUNNING,
     ];
 
     setState(() => _state = AppState.FETCHING_DATA);
@@ -54,23 +54,21 @@ class _MyAppState extends State<MyApp> {
     if (accessWasGranted) {
       try {
         // fetch new data
-        List<HealthDataPoint> healthData =
-            await health.getHealthDataFromTypes(startDate, endDate, types);
-
-        // save all the new data points
-        _healthDataList.addAll(healthData);
+        var healthDatas = <HealthDataStatistics>[];
+        healthDatas = await health.getHealthStatisticsFromTypes(startDate, endDate, types);
+        print(healthDatas);
       } catch (e) {
-        print("Caught exception in getHealthDataFromTypes: $e");
+        print("Caught exception in getHealthStatisticsFromTypes: $e");
       }
 
       // filter out duplicates
-      _healthDataList = HealthFactory.removeDuplicates(_healthDataList);
+      // _healthDataList = HealthFactory.removeDuplicates(_healthDataList);
 
       // print the results
-      _healthDataList.forEach((x) {
-        print("Data point: $x");
-        steps += x.value.round();
-      });
+      // _healthDataList.forEach((x) {
+      //   print("Data point: $x");
+      //   steps += x.value.round();
+      // });
 
       print("Steps: $steps");
 
@@ -103,11 +101,16 @@ class _MyAppState extends State<MyApp> {
     return ListView.builder(
         itemCount: _healthDataList.length,
         itemBuilder: (_, index) {
-          HealthDataPoint p = _healthDataList[index];
+          HealthDataStatistics p = _healthDataList[index];
+          // return ListTile(
+          //   title: Text("${p.typeString}: ${p.value}"),
+          //   trailing: Text('${p.unitString}'),
+          //   subtitle: Text('${p.dateFrom} - ${p.dateTo}'),
+          // );
           return ListTile(
-            title: Text("${p.typeString}: ${p.value}"),
-            trailing: Text('${p.unitString}'),
-            subtitle: Text('${p.dateFrom} - ${p.dateTo}'),
+            title: Text(":"),
+            trailing: Text(''),
+            subtitle: Text(' - '),
           );
         });
   }

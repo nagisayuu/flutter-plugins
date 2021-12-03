@@ -244,8 +244,6 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
                     "aggregation_style": aggregationStyle,
                     "sources": retSources,
                 ])
-                
-                print("yayayaayaya")
                 return
             default:
                 return

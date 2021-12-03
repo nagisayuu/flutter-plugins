@@ -67,6 +67,11 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
         else if (call.method.elementsEqual("getData")){
             getData(call: call, result: result)
         }
+
+        /// Handle getStatisticData
+        else if (call.method.elementsEqual("getStatisticData")){
+            getStatisticData(call: call, result: result)
+        }
     }
 
     func checkIfHealthDataAvailable(call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -163,9 +168,92 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
                 return
             }
         }
-
         HKHealthStore().execute(query)
     }
+
+    func getStatisticData(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? NSDictionary
+        let dataTypeKey = (arguments?["dataTypeKey"] as? String) ?? "DEFAULT"
+        let startDate = (arguments?["startDate"] as? NSNumber) ?? 0
+        let endDate = (arguments?["endDate"] as? NSNumber) ?? 0
+        // flag to exclude the record from other sources
+        let excludeUnnativeSource = (arguments?["excludeUnnativeSource"] as? Bool) ?? true
+
+        // Convert dates from milliseconds to Date()
+        let dateFrom = Date(timeIntervalSince1970: startDate.doubleValue / 1000)
+        let dateTo = Date(timeIntervalSince1970: endDate.doubleValue / 1000)
+
+        let dataType = dataTypeLookUp(key: dataTypeKey)
+        let predicate = HKQuery.predicateForSamples(withStart: dateFrom, end: dateTo, options: .strictStartDate)
+
+        let query = HKStatisticsQuery(quantityType: dataType as! HKQuantityType, quantitySamplePredicate: predicate, options: [.cumulativeSum, .separateBySource]) {
+            x, samplesOrNil, error in
+
+            switch samplesOrNil {
+            case let (sample as HKStatistics) as Any:            
+                if let sources = sample.sources?.filter({ $0.bundleIdentifier.hasPrefix("com.apple.health") }) {
+                    if (excludeUnnativeSource) {
+                        let sourcesPredicate = HKQuery.predicateForObjects(from: Set(sources))
+                        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [predicate, sourcesPredicate])
+                        let query = HKStatisticsQuery(quantityType: dataType as! HKQuantityType, 
+                            quantitySamplePredicate: predicate, 
+                            options: [.cumulativeSum, .separateBySource]) {
+                                (x, statistics, error) in
+                                let value = statistics?.sumQuantity()!.doubleValue(for: dataTypeKey == self.STEPS ? HKUnit.count() : HKUnit.meter())
+                                let aggregationStyle = sample.quantityType.aggregationStyle.rawValue == 0 ? "cumulative" :
+                                    sample.quantityType.aggregationStyle.rawValue == 1 ? "discrete" :
+                                    sample.quantityType.aggregationStyle.rawValue == 2 ? "discreteTemporallyWeighted" : "discreteEquivalentContinuousLevel"
+                                var retSources = [] as [NSDictionary]
+                                if var sources = statistics?.sources {
+                                    retSources = sources.map { source -> NSDictionary in
+                                        return [
+                                            "source_id": source.bundleIdentifier,
+                                            "source_name": source.name
+                                        ]
+                                    }
+                                }
+                                result([
+                                    "value": value,
+                                    "date_from": Int(sample.startDate.timeIntervalSince1970 * 1000),
+                                    "date_to": Int(sample.endDate.timeIntervalSince1970 * 1000),
+                                    "aggregation_style": aggregationStyle,
+                                    "sources": retSources,
+                                ])
+                        }
+                        HKHealthStore().execute(query)
+                        return
+                    }
+                } 
+                let value = sample.sumQuantity()!.doubleValue(for: dataTypeKey == self.STEPS ? HKUnit.count() : HKUnit.meter())
+                let aggregationStyle = sample.quantityType.aggregationStyle.rawValue == 0 ? "cumulative" :
+                    sample.quantityType.aggregationStyle.rawValue == 1 ? "discrete" :
+                    sample.quantityType.aggregationStyle.rawValue == 2 ? "discreteTemporallyWeighted" : "discreteEquivalentContinuousLevel" 
+                var retSources = [] as [NSDictionary]
+                if var sources = samplesOrNil?.sources {
+                    retSources = sources.map { source -> NSDictionary in
+                        return [
+                            "source_id": source.bundleIdentifier,
+                            "source_name": source.name
+                        ]
+                    }
+                }
+                result([
+                    "value": value,
+                    "date_from": Int(sample.startDate.timeIntervalSince1970 * 1000),
+                    "date_to": Int(sample.endDate.timeIntervalSince1970 * 1000),
+                    "aggregation_style": aggregationStyle,
+                    "sources": retSources,
+                ])
+                
+                print("yayayaayaya")
+                return
+            default:
+                return
+            }
+        }
+        HKHealthStore().execute(query)
+    }
+
 
     func unitLookUp(key: String) -> HKUnit {
         guard let unit = unitDict[key] else {

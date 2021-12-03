@@ -103,6 +103,17 @@ class HealthFactory {
     return removeDuplicates(dataPoints);
   }
 
+  Future<List<HealthDataStatistics>> getHealthStatisticsFromTypes(
+      DateTime startDate, DateTime endDate, List<HealthDataType> types) async {
+    final statistics = <HealthDataStatistics>[];
+
+    for (var type in types) {
+      final result = await _prepareStatisticsQuery(startDate, endDate, type);
+      statistics.add(result);
+    }
+    return statistics;
+  }
+
   /// Prepares a query, i.e. checks if the types are available, etc.
   Future<List<HealthDataPoint>> _prepareQuery(
       DateTime startDate, DateTime endDate, HealthDataType dataType) async {
@@ -125,6 +136,22 @@ class HealthFactory {
     return await _dataQuery(startDate, endDate, dataType);
   }
 
+  /// Prepares a query, i.e. checks if the types are available, etc.
+  Future<HealthDataStatistics> _prepareStatisticsQuery(
+      DateTime startDate, DateTime endDate, HealthDataType dataType) async {
+    // Ask for device ID only once
+    _deviceId ??= _platformType == PlatformType.ANDROID
+        ? (await _deviceInfo.androidInfo).androidId
+        : (await _deviceInfo.iosInfo).identifierForVendor;
+
+    // If not implemented on platform, throw an exception
+    if (!isDataTypeAvailable(dataType)) {
+      throw _HealthException(
+          dataType, 'Not available on platform $_platformType');
+    }
+    return await _statisticsQuery(startDate, endDate, dataType);
+  }
+
   /// The main function for fetching health data
   Future<List<HealthDataPoint>> _dataQuery(
       DateTime startDate, DateTime endDate, HealthDataType dataType) async {
@@ -138,6 +165,7 @@ class HealthFactory {
     final unit = _dataTypeToUnit[dataType]!;
 
     final fetchedDataPoints = await _channel.invokeMethod('getData', args);
+
     if (fetchedDataPoints != null) {
       return fetchedDataPoints.map<HealthDataPoint>((e) {
         final num value = e['value'];
@@ -160,6 +188,44 @@ class HealthFactory {
       }).toList();
     } else {
       return <HealthDataPoint>[];
+    }
+  }
+
+    /// The main function for fetching health data
+  Future<HealthDataStatistics> _statisticsQuery(
+      DateTime startDate, DateTime endDate, HealthDataType dataType) async {
+    // Set parameters for method channel request
+    final args = <String, dynamic>{
+      'dataTypeKey': _enumToString(dataType),
+      'startDate': startDate.millisecondsSinceEpoch,
+      'endDate': endDate.millisecondsSinceEpoch
+    };
+
+    final unit = _dataTypeToUnit[dataType]!;
+    final fetchedDataPoints = await _channel.invokeMethod('getStatisticData', args);
+
+
+    if (fetchedDataPoints != null) {
+      final num value = fetchedDataPoints['value'];
+      final DateTime from =
+        DateTime.fromMillisecondsSinceEpoch(fetchedDataPoints['date_from']);
+      final DateTime to = 
+        DateTime.fromMillisecondsSinceEpoch(fetchedDataPoints['date_to']);
+      final String aggregation_style = fetchedDataPoints["aggregation_style"];
+      final List<Source> sources = <Source>[];
+      fetchedDataPoints['sources'].forEach((elm)=>sources.add(Source(elm["source_id"], elm["source_name"])));
+      return HealthDataStatistics(
+        value,
+        dataType,
+        unit,
+        from,
+        to,
+        _platformType,
+        _deviceId!,
+        aggregation_style,
+        sources);
+    } else {
+      return {} as HealthDataStatistics;
     }
   }
 

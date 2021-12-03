@@ -9,6 +9,8 @@ import 'package:intl/intl.dart';
 
 part 'src/data_types.dart';
 part 'src/functions.dart';
+part 'src/source.dart';
+part 'src/health_data_statistics.dart';
 part 'src/health_data_point.dart';
 part 'src/health_factory.dart';
 part 'src/units.dart';
